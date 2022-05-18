@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
-
-	"go.uber.org/multierr"
 )
 
 type Params map[string]interface{}
@@ -50,30 +48,23 @@ func (q *Query) Wrap(wrapper string) *Query {
 
 var ErrParamNotFound = errors.New("param not found")
 
-func (e *executor) param(name string) string {
+func (e *executor) Param(name string) (string, error) {
 	idx, found := e.m[name]
 	if !found {
 		if v, found := e.params[name]; !found {
-			e.err = multierr.Append(e.err, fmt.Errorf("%w: %s", ErrParamNotFound, name))
-			return ""
+			return "", fmt.Errorf("%w: %s", ErrParamNotFound, name)
 		} else {
 			e.args = append(e.args, v)
 			idx, e.m[name] = len(e.args), len(e.args)
 		}
 	}
-	return fmt.Sprintf("$%d", idx)
+	return fmt.Sprintf("$%d", idx), nil
 }
 
 type executor struct {
 	params Params
 	m      map[string]int
 	args   []interface{}
-
-	err error
-}
-
-func (e *executor) Err() error {
-	return e.err
 }
 
 func (e *executor) Args() []interface{} {
@@ -85,14 +76,13 @@ func (q *Query) Build(params Params) (string, []interface{}, error) {
 		m:      make(map[string]int),
 		params: params,
 	}
-	t, err := template.New("").Funcs(template.FuncMap{"Param": e.param}).Parse(q.query)
+	t, err := template.New("query-template").Parse(q.query)
 	if err != nil {
 		return "", nil, err
 	}
 	var buf bytes.Buffer
-	err = t.Execute(&buf, params)
-	if err != nil {
+	if err = t.Execute(&buf, &e); err != nil {
 		return "", nil, err
 	}
-	return buf.String(), e.Args(), e.Err()
+	return buf.String(), e.Args(), nil
 }
