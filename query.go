@@ -18,9 +18,10 @@ type Query struct {
 }
 
 func New(base string) *Query {
-	var q Query
-	q.query = base
-	return &q
+	return &Query{
+		query:  base,
+		params: nil,
+	}
 }
 
 func (q *Query) Where(cond string) *Query {
